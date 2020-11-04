@@ -1,20 +1,23 @@
 
 BIN := brain
 
-all: $(BIN)
+SRCS := $(wildcard *.cc)
+OBJS := $(SRCS:.cc=.o)
+HDRS := $(wildcard *.hh)
 
-build/Makefile: Makefile CMakeLists.txt
-	mkdir -p build
-	(cd build && cmake -DCMAKE_BUILD_TYPE=Debug ..)
+CFLAGS := -g $(shell pkg-config --cflags gtk+-3.0 x11 gazebo opencv)
+LIBS   := $(shell pkg-config --libs gtk+-3.0 x11 gazebo opencv)
 
-$(BIN): $(wildcard *.cc) build/Makefile
-	(cd build && make)
-	cp build/$(BIN) .
+all:
+	make -j $(BIN)
 
-prereqs:
-	sudo apt install libgtk-3-dev libcairo2-dev
+$(BIN): $(OBJS)
+	g++ $(CFLAGS) -o $(BIN) $(OBJS) $(LIBS)
+
+%.o: %.cc $(HDRS)
+	g++ -c $(CFLAGS) -o $@ $<
 
 clean:
-	rm -rf build $(BIN)
+	rm -f *.o $(BIN)
 
-.PHONY: all clean prereqs
+.PHONY: clean all

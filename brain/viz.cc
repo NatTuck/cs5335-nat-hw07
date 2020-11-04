@@ -19,8 +19,6 @@ static cairo_surface_t* surface = NULL;
 static GtkWidget *window = NULL;
 static GtkWidget *drawing_area = NULL;
 
-GMutex mutex_interface;
-
 static void
 clear_surface (void)
 {
@@ -40,8 +38,6 @@ configure_event_cb(GtkWidget         *widget,
                    GdkEventConfigure *event,
                    gpointer           data)
 {
-    //guard _gg(mx);
-    g_mutex_lock(&mutex_interface);
     if (surface) {
         cairo_surface_destroy(surface);
     }
@@ -57,7 +53,6 @@ configure_event_cb(GtkWidget         *widget,
     clear_surface();
 
     /* We've handled the configure event, no need for further processing. */
-    g_mutex_unlock(&mutex_interface);
     return TRUE;
 }
 
@@ -70,8 +65,6 @@ draw_cb(GtkWidget *widget,
         cairo_t   *cr,
         gpointer   data)
 {
-    //guard _gg(mx);
-    g_mutex_lock(&mutex_interface);
     cairo_set_source_surface(cr, surface, 0, 0);
     cairo_paint(cr);
 
@@ -80,8 +73,6 @@ draw_cb(GtkWidget *widget,
     gtk_window_get_size(GTK_WINDOW(window), &ww, &hh);
     cout << "window: " << ww << "," << hh << endl;
     */
-    
-    g_mutex_unlock(&mutex_interface);
     return FALSE;
 }
 
@@ -119,10 +110,6 @@ button_press_event_cb(GtkWidget      *widget,
                       GdkEventButton *event,
                       gpointer        data)
 {
-    cout << "click" << endl;
-
-    //guard _gg(mx);
-    g_mutex_lock(&mutex_interface);
     /* paranoia check, in case we haven't gotten a configure event */
     if (surface == NULL)
         return FALSE;
@@ -142,7 +129,6 @@ button_press_event_cb(GtkWidget      *widget,
     }
 
     /* We've handled the event, stop processing */
-    g_mutex_unlock(&mutex_interface);
     return TRUE;
 }
 
@@ -155,8 +141,6 @@ motion_notify_event_cb (GtkWidget      *widget,
                         GdkEventMotion *event,
                         gpointer        data)
 {
-    //guard _gg(mx);
-    g_mutex_lock(&mutex_interface);
     /* paranoia check, in case we haven't gotten a configure event */
     if (surface == NULL)
         return FALSE;
@@ -167,19 +151,15 @@ motion_notify_event_cb (GtkWidget      *widget,
     */
 
     /* We've handled it, stop processing */
-    g_mutex_unlock(&mutex_interface);
     return TRUE;
 }
 
 static void
 close_window (void)
 {
-    //guard _gg(mx);
-    g_mutex_lock(&mutex_interface);
     if (surface) {
         cairo_surface_destroy(surface);
     }
-    g_mutex_unlock(&mutex_interface);
 }
 
 static void
@@ -226,15 +206,21 @@ activate (GtkApplication *app,
                           | GDK_POINTER_MOTION_MASK);
 
     gtk_widget_show_all(window);
-    gdk_threads_init();
 }
 
-void
-viz_hit(float range, float angle)
+typedef struct viz_hit_data {
+    float range;
+    float angle;
+} viz_hit_data;
+
+int
+viz_hit_callback(void* hit_data_ptr)
 {
-    //GDK_THREADS_ENTER();
-    //guard _gg(mx);
-    g_mutex_lock(&mutex_interface);
+    viz_hit_data hit = *((viz_hit_data*) hit_data_ptr);
+    free(hit_data_ptr);
+
+    float range = hit.range;
+    float angle = hit.angle;
 
     int ww = 0;
     int hh = 0;
@@ -247,11 +233,9 @@ viz_hit(float range, float angle)
     float dx = 0.5 * range * cos(angle);
     float dy = 0.5 * range * sin(angle);
 
-    /*
     cout << "rr,aa; dx,dy = "
          << range << "," << angle << "; "
          << dx << "," << dy << endl;
-    */
 
     int xx = dd + (dd*dx);
     int yy = hh - (dd + (dd*dy));
@@ -263,8 +247,17 @@ viz_hit(float range, float angle)
     */
 
     draw_brush(drawing_area, xx, yy);
-    g_mutex_unlock(&mutex_interface);
-    //GDK_THREADS_LEAVE();
+    return FALSE;
+}
+
+int
+viz_hit(float range, float angle)
+{
+    viz_hit_data* hit = (viz_hit_data*) malloc(sizeof(viz_hit_data));
+    hit->range = range;
+    hit->angle = angle;
+    int _id = gdk_threads_add_idle(viz_hit_callback, hit);
+    return 0;
 }
 
 int
