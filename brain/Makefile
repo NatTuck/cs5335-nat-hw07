@@ -20,4 +20,7 @@ $(BIN): $(OBJS)
 clean:
 	rm -f *.o $(BIN)
 
+prereqs:
+	sudo apt install libopencv-dev opencv-doc libgtk-3-dev
+
 .PHONY: clean all

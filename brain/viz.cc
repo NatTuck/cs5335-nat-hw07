@@ -8,10 +8,10 @@
 #include <cmath>
 using namespace std;
 
-//typedef lock_guard<mutex> guard;
-
 #include <X11/Xlib.h>
 #include <gtk/gtk.h>
+
+#include "viz.hh"
 
 /* Surface to store current scribbles */
 std::mutex mx;
@@ -99,6 +99,32 @@ draw_brush(GtkWidget *widget,
     /* Now invalidate the affected region of the drawing area. */
     gtk_widget_queue_draw_area(widget, x - 3, y - 3, 6, 6);
 }
+
+static void
+draw_brush_gs(GtkWidget *widget,
+           gdouble    x,
+           gdouble    y,
+           gdouble    v)
+{
+    cairo_t *cr;
+
+    //GdkRectangle rect;
+    //gtk_widget_get_allocation(widget, &rect);
+    //cout << "rect: " << rect.x << "," << rect.y << endl;
+
+    /* Paint to the surface, where we store our state */
+    cr = cairo_create(surface);
+    cairo_set_source_rgb(cr, v, v, v);
+
+    cairo_rectangle(cr, x - 3, y - 3, 6, 6);
+    cairo_fill(cr);
+
+    cairo_destroy(cr);
+
+    /* Now invalidate the affected region of the drawing area. */
+    gtk_widget_queue_draw_area(widget, x - 3, y - 3, 6, 6);
+}
+
 
 /* Handle button press events by either drawing a rectangle
  * or clearing the surface, depending on which button was pressed.
@@ -257,6 +283,38 @@ viz_hit(float range, float angle)
     hit->range = range;
     hit->angle = angle;
     int _id = gdk_threads_add_idle(viz_hit_callback, hit);
+    return 0;
+}
+
+int
+viz_show_callback(void* view_ptr)
+{
+    GridView view = *(GridView*)view_ptr;
+    delete (GridView*)view_ptr;
+
+    int ww = 0;
+    int hh = 0;
+    gtk_window_get_size(GTK_WINDOW(window), &ww, &hh);
+
+    clear_surface();
+    for (int ii = 0; ii < view.hh; ++ii) {
+        int yy = (hh/2) + 8*(ii - view.hh/2);
+
+        for (int jj = 0; jj < view.ww; ++jj) {
+            int xx = (ww/2) + 8*(jj - view.ww/2);
+            float vv = 1.0 - view.get(ii, jj);
+            draw_brush_gs(drawing_area, xx, hh-yy, vv);
+        }
+    }
+
+    return false;
+}
+
+int
+viz_show(GridView view)
+{
+    GridView* view_ptr = new GridView(view);
+    int _id = gdk_threads_add_idle(viz_show_callback, view_ptr);
     return 0;
 }
 

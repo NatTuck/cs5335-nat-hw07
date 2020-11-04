@@ -24,6 +24,7 @@ double
 clamp(double xmin, double xx, double xmax)
 {
     if (xx < xmin) return xmin;
+    if (xx > xmax) return xmax;
     return xx;
 }
 
