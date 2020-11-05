@@ -1,14 +1,14 @@
 
 #include <iostream>
 #include <thread>
+#include <algorithm>
 #include <math.h>
 
 #include "robot.hh"
 #include "grid.hh"
 #include "viz.hh"
 
-using std::cout;
-using std::endl;
+using namespace std;
 
 void
 callback(Robot* robot)
@@ -30,22 +30,40 @@ callback(Robot* robot)
     Mat view = grid_view(pose);
     viz_show(view);
 
-    //robot->set_vel(0, 0);
+    float ang = grid_goal_angle(pose);
+    float trn = clamp(-1.0, 3*ang, 1.0);
 
-    float lft = clamp(0.0, robot->ranges[2].range, 2.0);
     float fwd = clamp(0.0, robot->ranges[3].range, 2.0);
+    float lft = clamp(0.0, robot->ranges[2].range, 2.0);
     float rgt = clamp(0.0, robot->ranges[4].range, 2.0);
 
-    float spd = fwd - 1.0;
-    float trn = clamp(-1.0, lft - rgt, 1.0);
+    if (abs(ang) > 0.5) {
+        robot->set_vel(-trn, +trn);
+        return;
+    }
 
-    if (fwd < 1.2) {
-      spd = 0;
-      trn = 1;
+    if (fwd > 1.0) {
+        robot->set_vel(2.0f - trn, 2.0f + trn);
+        return;
+    }
+
+    // Wall follow.
+    float spd = clamp(0, fwd - 1.0, 1);
+    if (lft < rgt) {
+        trn = 1;
+        if (lft < 0.75) {
+            spd = 0;
+        }
+    }
+    else {
+        if (rgt < 0.75) {
+            spd = 0;
+        }
+        trn = -1;
     }
 
     //cout << "spd,trn = " << spd << "," << trn << endl;
-    robot->set_vel(spd + trn, spd - trn);
+    robot->set_vel(spd - trn, spd + trn);
 }
 
 void
@@ -59,6 +77,7 @@ main(int argc, char* argv[])
 {
     cout << "making robot" << endl;
     Robot robot(argc, argv, callback);
+
     std::thread rthr(robot_thread, &robot);
 
     return viz_run(argc, argv);

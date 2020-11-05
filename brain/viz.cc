@@ -316,10 +316,6 @@ viz_show_callback(void* view_ptr)
     Mat view = *(Mat*)view_ptr;
     delete (Mat*)view_ptr;
 
-    cout << "show mat " << view.rows << "*" << view.cols << endl;
-    cout << "10,10: " << (int)view.at<Vec3b>(10,10)[0] << endl;
-    cout << "10,11: " << (int)view.at<Vec3b>(10,11)[0] << endl;
-
     int ww = 0;
     int hh = 0;
     gtk_window_get_size(GTK_WINDOW(window), &ww, &hh);

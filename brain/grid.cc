@@ -29,12 +29,26 @@ iclamp(int xmin, int xx, int xmax)
 }
 
 static
+float
+cx(coords cc)
+{
+    return cc.first * CELL_SIZE;
+}
+
+static
+float
+cy(coords cc)
+{
+    return cc.second * CELL_SIZE;
+}
+
+static
 string
 coords_to_s(coords cc)
 {
     char temp[100];
-    float xx = cc.first * CELL_SIZE;
-    float yy = cc.second * CELL_SIZE;
+    float xx = cx(cc);
+    float yy = cy(cc);
     snprintf(temp, 100, "(k:%.02f,%.02f)", xx, yy);
     return string(temp);
 }
@@ -81,13 +95,36 @@ key(float xx, float yy)
     return make_pair(c2k(xx), c2k(yy));
 }
 
+vector<coords>
+neibs(coords aa)
+{
+    int xx = aa.first;
+    int yy = aa.second;
+
+    vector<coords> ys;
+
+    if (abs(xx) > 100 || abs(yy) > 100) {
+        return ys;
+    }
+
+    ys.push_back(make_pair(xx, yy+1));
+    ys.push_back(make_pair(xx, yy-1));
+    ys.push_back(make_pair(xx+1, yy));
+    ys.push_back(make_pair(xx-1, yy));
+    ys.push_back(make_pair(xx+1, yy+1));
+    ys.push_back(make_pair(xx+1, yy-1));
+    ys.push_back(make_pair(xx-1, yy+1));
+    ys.push_back(make_pair(xx-1, yy-1));
+
+    return ys;
+}
 
 void
 grid_apply_hit(LaserHit hit, Pose pose)
 {
     set<coords> cells;
 
-    for (float ds = 0.0f; ds < (hit.range - CELL_SIZE); ds += 0.1f) {
+    for (float ds = 0.0f; ds < (hit.range - CELL_SIZE - 0.1); ds += 0.1f) {
         float xx = pose.x + ds * cos(pose.t + hit.angle);
         float yy = pose.y + ds * sin(pose.t + hit.angle);
         cells.insert(key(xx, yy));
@@ -100,7 +137,11 @@ grid_apply_hit(LaserHit hit, Pose pose)
     float hx = pose.x + hit.range * cos(pose.t + hit.angle);
     float hy = pose.y + hit.range * sin(pose.t + hit.angle);
     coords hk = key(hx, hy);
-    grid_inc(hk, +5);
+    grid_inc(hk, +8);
+
+    for (auto cell : neibs(hk)) {
+        grid_inc(cell, +4);
+    }
 
     /*
     cout << "Hit @ " << hx << "," << hy
@@ -182,25 +223,6 @@ typedef priority_queue<
     MoreDist
 > search_queue;
 
-vector<coords>
-neibs(coords aa)
-{
-    int xx = aa.first;
-    int yy = aa.second;
-
-    vector<coords> ys;
-
-    if (abs(xx) > 100 || abs(yy) > 100) {
-        return ys;
-    }
-
-    ys.push_back(make_pair(xx, yy+1));
-    ys.push_back(make_pair(xx, yy-1));
-    ys.push_back(make_pair(xx+1, yy));
-    ys.push_back(make_pair(xx-1, yy));
-
-    return ys;
-}
 
 // A* search
 // ref: https://en.wikipedia.org/wiki/A*_search_algorithm
@@ -210,8 +232,10 @@ grid_find_path(float x0, float y0, float x1, float y1)
     coords cell0 = key(x0, y0);
     coords cell1 = key(x1, y1);
 
+    /*
     cout << "finding path from " << coords_to_s(cell0)
          << " to " << coords_to_s(cell1) << endl;
+    */
 
     bool               done = false;
     set<coords>        seen;
@@ -244,12 +268,19 @@ grid_find_path(float x0, float y0, float x1, float y1)
             prev[nn] = cc;
             costs[nn] = costs[cc] + distance(cc, nn);
 
+            float penalty = 1.0f;
+
             int vv = grid_get(nn);
             if (vv > 10) {
-                continue;
+                penalty += vv * (10 * 1000 * 1000);
             }
 
-            float score = costs[cc] + distance(nn, cell1);
+            for (auto n2 : neibs(nn)) {
+                int v2 = grid_get(n2);
+                penalty += iclamp(0, 3 * v2, 30);
+            }
+
+            float score = penalty + (costs[cc] + distance(nn, cell1));
             queue.push(SearchCell(nn, score));
         }
     }
@@ -277,4 +308,40 @@ grid_find_path(float x0, float y0, float x1, float y1)
     }
     cout << endl;
     */
+}
+
+static
+float
+ang_diff(float aa, float bb)
+{
+    float cc = aa - bb;
+    while (cc > M_PI) {
+        cc -= 2*M_PI;
+    }
+    while (cc < -M_PI) {
+        cc += 2*M_PI;
+    }
+    return cc;
+}
+
+float
+grid_goal_angle(Pose pose)
+{
+    if (path.empty()) {
+        return 0.0f;
+    }
+
+    int ii = min(3, int(path.size() - 1));
+    coords tgt = path[ii];
+
+    float dx = cx(tgt) - pose.x;
+    float dy = cy(tgt) - pose.y;
+    float ga = atan2(dy, dx);
+
+    float ra = ang_diff(ga, pose.t);
+
+    cout << "ga = " << ga << "; "
+         << "ra = " << ra << endl;
+
+    return ra;
 }
