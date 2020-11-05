@@ -125,6 +125,30 @@ draw_brush_gs(GtkWidget *widget,
     gtk_widget_queue_draw_area(widget, x - 3, y - 3, 6, 6);
 }
 
+static void
+draw_brush_color(GtkWidget *widget,
+           gdouble    x,
+           gdouble    y,
+           Vec3b      pix)
+{
+    cairo_t *cr;
+
+    //GdkRectangle rect;
+    //gtk_widget_get_allocation(widget, &rect);
+    //cout << "rect: " << rect.x << "," << rect.y << endl;
+
+    /* Paint to the surface, where we store our state */
+    cr = cairo_create(surface);
+    cairo_set_source_rgb(cr, pix[0] / 255.0, pix[1] / 255.0, pix[2] / 255.0);
+
+    cairo_rectangle(cr, x - 3, y - 3, 6, 6);
+    cairo_fill(cr);
+
+    cairo_destroy(cr);
+
+    /* Now invalidate the affected region of the drawing area. */
+    gtk_widget_queue_draw_area(widget, x - 3, y - 3, 6, 6);
+}
 
 /* Handle button press events by either drawing a rectangle
  * or clearing the surface, depending on which button was pressed.
@@ -289,21 +313,26 @@ viz_hit(float range, float angle)
 int
 viz_show_callback(void* view_ptr)
 {
-    GridView view = *(GridView*)view_ptr;
-    delete (GridView*)view_ptr;
+    Mat view = *(Mat*)view_ptr;
+    delete (Mat*)view_ptr;
+
+    cout << "show mat " << view.rows << "*" << view.cols << endl;
+    cout << "10,10: " << (int)view.at<Vec3b>(10,10)[0] << endl;
+    cout << "10,11: " << (int)view.at<Vec3b>(10,11)[0] << endl;
 
     int ww = 0;
     int hh = 0;
     gtk_window_get_size(GTK_WINDOW(window), &ww, &hh);
 
     clear_surface();
-    for (int ii = 0; ii < view.hh; ++ii) {
-        int yy = (hh/2) + 8*(ii - view.hh/2);
+    for (int ii = 0; ii < view.rows; ++ii) {
+        int yy = (hh/2) + 8*(ii - view.rows/2);
 
-        for (int jj = 0; jj < view.ww; ++jj) {
-            int xx = (ww/2) + 8*(jj - view.ww/2);
-            float vv = 1.0 - view.get(ii, jj);
-            draw_brush_gs(drawing_area, xx, hh-yy, vv);
+        for (int jj = 0; jj < view.cols; ++jj) {
+            int xx = (ww/2) + 8*(jj - view.cols/2);
+
+            auto pix = view.at<Vec3b>(ii, jj);
+            draw_brush_color(drawing_area, xx, hh-yy, pix);
         }
     }
 
@@ -311,9 +340,9 @@ viz_show_callback(void* view_ptr)
 }
 
 int
-viz_show(GridView view)
+viz_show(Mat view)
 {
-    GridView* view_ptr = new GridView(view);
+    Mat* view_ptr = new Mat(view);
     int _id = gdk_threads_add_idle(viz_show_callback, view_ptr);
     return 0;
 }

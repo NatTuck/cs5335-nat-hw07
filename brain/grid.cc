@@ -4,6 +4,10 @@
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include <queue>
+#include <vector>
+#include <algorithm>
+#include <cassert>
 #include <stdio.h>
 
 #include "grid.hh"
@@ -12,8 +16,8 @@ using namespace std;
 
 typedef pair<int,int> coords;
 
-
 static std::map<coords, int> grid;
+static std::vector<coords> path;
 
 static
 int
@@ -104,13 +108,18 @@ grid_apply_hit(LaserHit hit, Pose pose)
     */
 }
 
-GridView
+Mat
 grid_view(Pose pose)
 {
     //cout << "get grid_view @ " << pose.to_s() << endl;
     //cout << fixed << setprecision(2) << endl;
 
-    GridView gv(VIEW_SIZE, VIEW_SIZE);
+    Mat gv(VIEW_SIZE, VIEW_SIZE, CV_8UC3);
+
+    set<coords> path_cells;
+    for (auto cell : path) {
+        path_cells.insert(cell);
+    }
 
     for (int ii = 0; ii < VIEW_SIZE; ++ii) {
         float dx = CELL_SIZE * (ii - (VIEW_SIZE/2));
@@ -121,20 +130,151 @@ grid_view(Pose pose)
             float yy = pose.y + dy;
 
             coords kk = key(xx, yy);
-            int vv = grid_get(kk);
+            int vv = 250 - (2.5 * grid_get(kk));
 
-            /*
-            cout << coords_to_s(kk) << " "
-                 << vv << " ";
-            */
+            // Walls
+            gv.at<Vec3b>(jj, ii) = Vec3b(vv, vv, vv);
 
-            float vf = vv / 100.0f;
-            gv.put(jj, ii, vf);
+            if (path_cells.find(kk) != path_cells.end()) {
+                // yes path
+                gv.at<Vec3b>(jj, ii) = Vec3b(0, 0, 255);
+            }
         }
-        //cout << endl;
     }
 
-    //cout << endl;
-
     return gv;
+}
+
+
+class SearchCell {
+  public:
+    coords cell;
+    float  dist;
+
+    SearchCell(coords cc, float dd)
+        : cell(cc), dist(dd)
+    {}
+};
+
+static
+float
+distance(coords aa, coords bb)
+{
+    float dx = bb.first - aa.first;
+    float dy = bb.second - aa.second;
+    return sqrt(dx*dx + dy*dy);
+}
+
+
+class MoreDist {
+  public:
+    constexpr
+    bool
+    operator()(const SearchCell& aa, const SearchCell& bb)
+    {
+        return aa.dist > bb.dist;
+    }
+};
+
+typedef priority_queue<
+    SearchCell,
+    vector<SearchCell>,
+    MoreDist
+> search_queue;
+
+vector<coords>
+neibs(coords aa)
+{
+    int xx = aa.first;
+    int yy = aa.second;
+
+    vector<coords> ys;
+
+    if (abs(xx) > 100 || abs(yy) > 100) {
+        return ys;
+    }
+
+    ys.push_back(make_pair(xx, yy+1));
+    ys.push_back(make_pair(xx, yy-1));
+    ys.push_back(make_pair(xx+1, yy));
+    ys.push_back(make_pair(xx-1, yy));
+
+    return ys;
+}
+
+// A* search
+// ref: https://en.wikipedia.org/wiki/A*_search_algorithm
+void
+grid_find_path(float x0, float y0, float x1, float y1)
+{
+    coords cell0 = key(x0, y0);
+    coords cell1 = key(x1, y1);
+
+    cout << "finding path from " << coords_to_s(cell0)
+         << " to " << coords_to_s(cell1) << endl;
+
+    bool               done = false;
+    set<coords>        seen;
+    search_queue       queue;
+    map<coords,float>  costs;
+    map<coords,coords> prev;
+
+    seen.insert(cell0);
+    costs[cell0] = 0.0f;
+    queue.push(SearchCell(cell0, 1.0f));
+
+    while (!queue.empty()) {
+        SearchCell sc = queue.top();
+        queue.pop();
+
+        coords cc = sc.cell;
+        //cout << "expanding " << coords_to_s(cc) << endl;
+
+        if (cc == cell1) {
+            done = true;
+            break;
+        }
+
+        for (auto nn : neibs(cc)) {
+            if (seen.find(nn) != seen.end()) {
+                continue;
+            }
+
+            seen.insert(nn);
+            prev[nn] = cc;
+            costs[nn] = costs[cc] + distance(cc, nn);
+
+            int vv = grid_get(nn);
+            if (vv > 10) {
+                continue;
+            }
+
+            float score = costs[cc] + distance(nn, cell1);
+            queue.push(SearchCell(nn, score));
+        }
+    }
+
+    path.clear();
+
+    if (!done) {
+        cout << "no path found" << endl;
+        return;
+    }
+
+    coords cc = cell1;
+
+    while (cc != cell0) {
+        path.push_back(cc);
+        cc = prev[cc];
+    }
+
+    reverse(path.begin(), path.end());
+
+    /*
+    cout << endl << "=== path ===" << endl;
+    for (auto item : path) {
+        cout << coords_to_s(item) << " ";
+    }
+    cout << endl;
+    */
 }

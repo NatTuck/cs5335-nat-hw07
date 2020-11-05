@@ -25,7 +25,9 @@ callback(Robot* robot)
         }
     }
 
-    GridView view = grid_view(pose);
+    grid_find_path(pose.x, pose.y, 0.0f, 20.0f);
+
+    Mat view = grid_view(pose);
     viz_show(view);
 
     //robot->set_vel(0, 0);
